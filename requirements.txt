@@ -6,3 +6,4 @@ scikit-learn
 scipy
 sklearn
 seaborn
+lightgbm
