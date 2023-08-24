@@ -8,3 +8,5 @@ sklearn
 seaborn
 lightgbm
 imblearn
+xgboost
+catboost
