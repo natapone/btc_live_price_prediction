@@ -1,3 +1,8 @@
 pandas
 matplotlib
 statsmodels
+ta-lib
+scikit-learn
+scipy
+sklearn
+seaborn
