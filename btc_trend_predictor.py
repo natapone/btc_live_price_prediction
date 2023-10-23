@@ -388,7 +388,7 @@ class BtcTrendPredictor:
 
         return y_pred
     
-    def evaluate_live_data(self, df_live, y_live_pred, to_file=True):
+    def evaluate_live_data(self, df_live, y_live_pred, expired_time = 0, to_file=True):
         # Get prediction result
         # y_live_pred = self.predict_live_data(df_live, feature_function=feature_function)
 
@@ -441,13 +441,8 @@ class BtcTrendPredictor:
         table.auto_set_column_width(col=list(range(5)))
         ax[1].set_title("Classification Report")
 
-        # Calculate expired time from last datetime in df_live index + 1 hour and convert to epoch
-        # last_datetime = df_live.index[-1] + datetime.timedelta(hours=2) # 1 hr offset + 1 hr API update interval
-        # expired_time = int(last_datetime.timestamp())
-        # print(f"Expired time: {last_datetime}, {expired_time}")
-
-
-        plot_filepath = self.plot_path + self.model_name + '_eval.png'
+        
+        plot_filepath = self.plot_path + self.model_name + f'_eval_exp_{expired_time}.png'
 
         if to_file:
             # save plot to file
@@ -458,7 +453,7 @@ class BtcTrendPredictor:
 
         return plot_filepath
 
-    def plot_live_trend_prediction(self, df_live, y_live_pred, to_file=True):
+    def plot_live_trend_prediction(self, df_live, y_live_pred, expired_time = 0, to_file=True):
 
         # Get prediction result
         # y_live_pred = predict_live_data(df_live, T, model_name = model_name, model_path = model_path, feature_function=feature_function)
@@ -671,7 +666,7 @@ class BtcTrendPredictor:
         # set plot title
         axes[2].set_title(f'BTCUSDT Trend Prediction {self.predict_period} hr ahead- Candlestick')
 
-        plot_filepath = self.plot_path + self.model_name + '_prediction.png'
+        plot_filepath = self.plot_path + self.model_name + f'_prediction_exp_{expired_time}.png'
         if to_file:
             # save plot to file
             fig.savefig(plot_filepath)
@@ -679,6 +674,26 @@ class BtcTrendPredictor:
             plt.show()
 
         return plot_filepath
+    
+    def get_live_prediction(self):
+        # Get live data
+        df_live = self.fetch_live_binance_data()
+
+        # Calculate expired time from last datetime in df_live index + 1 hour and convert to epoch
+        last_datetime = df_live.index[-1] + datetime.timedelta(hours=2) # 1 hr offset + 1 hr API update interval
+        expired_time = int(last_datetime.timestamp())
+        # print(f"Expired time: {last_datetime}, {expired_time}")
+
+        # Get prediction result
+        y_live_pred = self.predict_live_data(df_live, feature_function='get_features_v1')
+
+        # Evaluate prediction
+        eval_plot_filepath = self.evaluate_live_data(df_live, y_live_pred, expired_time = expired_time, to_file=True)
+        pred_plot_filepath = self.plot_live_trend_prediction(df_live, y_live_pred, expired_time = expired_time, to_file=True)
+
+        return eval_plot_filepath, pred_plot_filepath
+
+    # def get_live_prediction_cache(self):
 
 # === Usage ===
 # predictor = BtcTrendPredictor(predict_period = 1)
