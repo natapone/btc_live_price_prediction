@@ -359,7 +359,7 @@ class BtcTrendPredictor:
 
         # Dimension parameters
         F = int((X_live.shape[1]) / self.T) # number of input features 
-        print(f"Input shape: ({self.T}, {F})")
+        # print(f"Input shape: ({self.T}, {F})")
 
         # load scaler
         scaler_filepath = self.model_path + self.model_name + '_scaler.joblib'
@@ -388,6 +388,71 @@ class BtcTrendPredictor:
         y_pred = np.insert(y_pred, 0,  [np.nan] * len_diff, axis=0)
 
         return y_pred
+    
+    def evaluate_live_data(self, df_live, feature_function='get_features_v1'):
+        # Get prediction result
+        y_live_pred = self.predict_live_data(df_live, feature_function=feature_function)
+
+        pred_result = df_live.copy()
+        pred_result.loc[:, 'prediction'] = y_live_pred
+
+        # Get target
+        pred_result = self.get_target(pred_result, target_shift = self.predict_period)
+        pred_result.dropna(inplace=True)
+
+        y_test = pred_result['target']
+        y_pred = pred_result['prediction']
+        
+        fig, ax = plt.subplots(1, 2, figsize=(15, 7))
+
+        classes = ['-3.0', '-2.0', '-1.0', '1.0', '2.0', '3.0']
+
+        # Confusion Matrix
+        matrix = confusion_matrix(y_test, y_pred)
+        sns.heatmap(matrix, annot=True, fmt="d", cmap='Blues', ax=ax[0])
+        ax[0].set_xticklabels(classes, rotation=45)
+        ax[0].set_yticklabels(classes, rotation=0)
+        ax[0].set_xlabel('Predicted')
+        ax[0].set_ylabel('True')
+        ax[0].set_title("Confusion Matrix")
+
+        # Classification Report
+        report = classification_report(y_test, y_pred, output_dict=True, target_names=classes)
+        row_data = [["", "precision", "recall", "f1-score", "support"]]
+        for k, v in report.items():
+            if k not in ["accuracy"]:
+                row_data.append([f"{k}"] + [f'{v[i]:.2f}' for i in ["precision", "recall", "f1-score", "support"]])
+        row_data.append(["accuracy", "", "", f"{report['accuracy']:.2f}", ""])
+
+        ax[1].axis('off')
+        table = ax[1].table(cellText=row_data, loc='center', cellLoc='center', colWidths=[0.2, 0.2, 0.2, 0.2, 0.2])
+        table.scale(1, 2)
+
+        # Style the table with similar colors of the heatmap
+        table.auto_set_font_size(False)
+        table.set_fontsize(10)
+        for (i, j), cell in table.get_celld().items():
+            if i == 0:
+                cell.set_text_props(weight='bold', color='w')
+                cell.set_facecolor('#2c7bb6')  # Header cells color
+            else:
+                cell.set_facecolor('#f5f5f5')  # Rest of the table color
+            cell.set_edgecolor('w')  # Border color
+
+        table.auto_set_column_width(col=list(range(5)))
+        ax[1].set_title("Classification Report")
+
+        plt.tight_layout()
+        plt.show()
+
+        # save plot to file
+        plot_filepath = self.plot_path + self.model_name + '_eval.png'
+        fig.savefig(plot_filepath)
+
+
+        return pred_result
+
+    
 
 # === Usage ===
 # predictor = BtcTrendPredictor(predict_period = 1)
