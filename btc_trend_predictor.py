@@ -1,3 +1,4 @@
+
 import pandas as pd
 import numpy as np
 import joblib
@@ -8,13 +9,14 @@ import talib
 
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import OneHotEncoder, StandardScaler, MinMaxScaler
-
-from tensorflow.keras.models import load_model
-
-
 from sklearn.metrics import confusion_matrix, classification_report, accuracy_score, f1_score
 
+import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+
 import tensorflow as tf
+
+from tensorflow.keras.models import load_model
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import LSTM, Dense, Dropout, BatchNormalization
 from tensorflow.keras.callbacks import EarlyStopping
@@ -25,14 +27,18 @@ import seaborn as sns
 import time
 import joblib
 
-class BtcTrendPredictor:
-    def __init__(self, predict_period = 1, model_path = './models/'):
 
+
+class BtcTrendPredictor:
+    
+    def __init__(self, predict_period = 1, model_path = './models/', plot_path = './predict_live_plot/'):
+        
         self.T = 72 # number of periods to use as input features (time steps)
         self.predict_period = predict_period # number of periods to predict
         self.C = 6 # number of classes
         self.model_path = model_path
         self.model_name = f'btc_live_pred_{predict_period}hr'
+        self.plot_path = plot_path
 
     def remove_outlier(self, df, iqr_threshold = 5):
     
@@ -301,61 +307,6 @@ class BtcTrendPredictor:
 
         return model
 
-    # def train_dl_trend_prediction_model(self,feature_function='get_features_v1', test_size=0.2, epochs=300):
-    #     # 1. Get features and target
-    #     # Get features
-    #     X = df.copy()
-    #     X = globals()[feature_function](X, T=T)
-    #     X.dropna(inplace=True)
-
-    #     # Get target
-    #     y = df.copy()
-    #     y = self.get_target(y, target_shift = self.predict_period)
-    #     y.dropna(inplace=True)
-
-    #     # 2. Split into train and test sets
-    #     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, shuffle=False)
-
-    #     # 3. Scale the data
-    #     scaler = MinMaxScaler()
-    #     X_train_scaled = scaler.fit_transform(X_train)
-    #     X_test_scaled = scaler.transform(X_test)
-
-    #     # 4. Reshape the data
-    #     X_train_scaled = X_train_scaled.reshape(X_train_scaled.shape[0], T, 1)
-    #     X_test_scaled = X_test_scaled.reshape(X_test_scaled.shape[0], T, 1)
-
-    #     # 5. One-hot encode the target
-    #     encoder = OneHotEncoder(sparse=False)
-    #     y_train_encoded = encoder.fit_transform(y_train.values.reshape(-1, 1))
-    #     y_test_encoded = encoder.transform(y_test.values.reshape(-1, 1))
-
-    #     # 6. Build the model
-    #     model = Sequential()
-    #     model.add(LSTM(50, input_shape=(T, 1)))
-    #     model.add(Dense(self.C, activation='softmax'))
-    #     model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
-
-    #     # 7. Fit the model
-    #     model.fit(X_train_scaled, y_train_encoded, epochs=epochs, validation_data=(X_test_scaled, y_test_encoded), verbose=1)
-
-    #     # 8. Save the model, scaler and encoder
-    #     model.save(f"./models/{model_name}.h5")
-    #     joblib.dump(scaler, f"./models/{model_name}_scaler.joblib")
-    #     joblib.dump(encoder, f"./models/{model_name}_encoder.joblib")
-
-    #     return model
-
-    # def fetch_live_data(self, ):
-    #     # Fetch live data from Binance
-    #     url = f"https://api.binance.com/api/v3/klines?symbol={BTCUSDT}&interval={1h}"
-    #     data = requests.get(url).json()
-    #     df = pd.DataFrame(data, columns=['datetime', 'open', 'high', 'low', 'close', 'volume', 'close_time', 'quote_asset_volume', 'number_of_trades', 'taker_buy_base', 'taker_buy_quote', 'ignore'])
-    #     df = df[['datetime', 'open', 'high', 'low', 'close', 'volume']]
-    #     df['datetime'] = pd.to_datetime(df['datetime'], unit='ms')
-    #     df.set_index('datetime', inplace=True)
-    #     return df
-    
     def format_live_binance_data(self, df):
 
         # use only completed hour
@@ -392,70 +343,51 @@ class BtcTrendPredictor:
 
         return df
 
-    # def get_target(self, df, target_shift = 2):
-    #     # def get_target_next_ema_diff_v2(df, target_shift = 3):
-        
-    #     target_threshold = 0.2
-    #     # oclh
-    #     df['ohlc'] = (df['open'] + df['high'] + df['low'] + df['close']) / 4
-
-    #     # diff between ema 10 and 20
-    #     df['ema_10'] = talib.EMA(df['ohlc'], timeperiod=10)
-    #     df['ema_20'] = talib.EMA(df['ohlc'], timeperiod=20)
-    #     df['ema_diff'] = (df['ema_10'] - df['ema_20']) / df['ohlc'] * 100
-
-    #     conditions = [
-    #         (df['ema_diff'].isnull()),
-    #         (df['ema_diff'] > target_threshold) & (df['ema_diff'] > df['ema_diff'].shift(1)),
-    #         (df['ema_diff'] > target_threshold) & (df['ema_diff'] <= df['ema_diff'].shift(1)),
-    #         (df['ema_diff'] > 0) & (df['ema_diff'] <= target_threshold),
-    #         (df['ema_diff'] < target_threshold * -1) & (df['ema_diff'] < df['ema_diff'].shift(1)),
-    #         (df['ema_diff'] < target_threshold * -1) & (df['ema_diff'] >= df['ema_diff'].shift(1)),
-    #         (df['ema_diff'] <= 0) & (df['ema_diff'] >= target_threshold * -1)
-    #     ]
-    #     values = [np.nan, 3, 2, 1, -3, -2, -1]
-    #     df['target'] = np.select(conditions, values, default=0,)
-
-    #     # shift target
-    #     df['target'] = df['target'].shift(target_shift * -1)
-
-    #     # drop columns
-    #     df.drop(columns=['ohlc', 'ema_10', 'ema_20', 'ema_diff'], inplace=True)
-
-    #     return df
-
-    # def preprocess_data(self, df):
-    #     df = get_target(df)  # Use the target function you provided
-    #     df = get_features(df, self.T)  # Use the features function you provided
-    #     df.drop(columns=['target'], inplace=True, errors='ignore')  # Drop the target column
-    #     return df
-
-    def predict(self):
-        # 1. Fetch live data
-        live_data = self.fetch_live_binance_data()
-
-        # 2. Get features and target
+    def predict_live_data(self, df_live, feature_function='get_features_v1'):
         # Get features
         X_live = df_live.copy()
-        X_live = globals()[feature_function](X_live, T=T)
+
+        # Call function in variable feature_function (get_features_v1)
+        feature_to_call = getattr(self, feature_function)
+
+        if callable(feature_to_call):
+            X_live = feature_to_call(X_live, T=self.T)
+        else:
+            print(f"{feature_function} is not a valid method of this class.")
+
         X_live.dropna(inplace=True)
 
-    #     # 2. Preprocess the live data
-    #     preprocessed_data = self.preprocess_data(live_data)
+        # Dimension parameters
+        F = int((X_live.shape[1]) / self.T) # number of input features 
+        print(f"Input shape: ({self.T}, {F})")
 
-    #     # Ensure you have the last batch of size T for prediction
-    #     if preprocessed_data.shape[0] < self.T:
-    #         raise ValueError("Not enough live data to make a prediction.")
+        # load scaler
+        scaler_filepath = self.model_path + self.model_name + '_scaler.joblib'
+        scaler = joblib.load(scaler_filepath)
+        X_live_pre = scaler.transform(X_live)
 
-    #     input_data = preprocessed_data[-self.T:].values
-    #     input_data = self.scaler.transform(input_data).reshape(1, self.T, -1)
+        X_live_pre = X_live_pre.reshape(-1, self.T, F)
 
-    #     # 3. Predict
-    #     prediction = self.model.predict(input_data)
-    #     trend = self.encoder.inverse_transform(prediction)
-    #     return trend[0][0]
+        # load deep learning model
+        model_filepath = self.model_path + self.model_name + '_model.keras'
+        model = tf.keras.models.load_model(model_filepath)
 
-        return FileNotFoundError
+        # predict
+        y_pred = model.predict(X_live_pre, verbose=0)
+
+        # load encoder
+        encoder_filepath = self.model_path + self.model_name + '_encoder.joblib'
+        encoder = joblib.load(encoder_filepath)
+
+        # reverse one-hot encoding
+        y_pred = encoder.inverse_transform(y_pred)
+        y_pred = y_pred.flatten()
+
+        # insert missing prediction with nan
+        len_diff = len(df_live) - len(y_pred)
+        y_pred = np.insert(y_pred, 0,  [np.nan] * len_diff, axis=0)
+
+        return y_pred
 
 # === Usage ===
 # predictor = BtcTrendPredictor(predict_period = 1)
