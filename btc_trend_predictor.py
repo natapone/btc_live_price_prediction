@@ -25,8 +25,7 @@ from tensorflow.keras.regularizers import l1, l2
 import matplotlib.pyplot as plt
 import seaborn as sns
 import time
-import joblib
-
+import mplfinance as mpf
 
 
 class BtcTrendPredictor:
@@ -389,9 +388,9 @@ class BtcTrendPredictor:
 
         return y_pred
     
-    def evaluate_live_data(self, df_live, feature_function='get_features_v1'):
+    def evaluate_live_data(self, df_live, y_live_pred, to_file=True):
         # Get prediction result
-        y_live_pred = self.predict_live_data(df_live, feature_function=feature_function)
+        # y_live_pred = self.predict_live_data(df_live, feature_function=feature_function)
 
         pred_result = df_live.copy()
         pred_result.loc[:, 'prediction'] = y_live_pred
@@ -442,17 +441,244 @@ class BtcTrendPredictor:
         table.auto_set_column_width(col=list(range(5)))
         ax[1].set_title("Classification Report")
 
-        plt.tight_layout()
-        plt.show()
+        # Calculate expired time from last datetime in df_live index + 1 hour and convert to epoch
+        # last_datetime = df_live.index[-1] + datetime.timedelta(hours=2) # 1 hr offset + 1 hr API update interval
+        # expired_time = int(last_datetime.timestamp())
+        # print(f"Expired time: {last_datetime}, {expired_time}")
 
-        # save plot to file
+
         plot_filepath = self.plot_path + self.model_name + '_eval.png'
-        fig.savefig(plot_filepath)
+
+        if to_file:
+            # save plot to file
+            fig.savefig(plot_filepath)
+        else:
+            plt.tight_layout()
+            plt.show()
+
+        return plot_filepath
+
+    def plot_live_trend_prediction(self, df_live, y_live_pred, to_file=True):
+
+        # Get prediction result
+        # y_live_pred = predict_live_data(df_live, T, model_name = model_name, model_path = model_path, feature_function=feature_function)
+        
+        pred_result = df_live.copy()
+        pred_result.loc[:, 'prediction'] = y_live_pred
+
+        # ohlc
+        pred_result['ohlc'] = (pred_result['open'] + pred_result['high'] + pred_result['low'] + pred_result['close']) / 4
+
+        # diff between ema 10 and 20
+        pred_result['ema_10'] = talib.EMA(pred_result['ohlc'], timeperiod=10)
+        pred_result['ema_20'] = talib.EMA(pred_result['ohlc'], timeperiod=20)
+
+        pred_result.dropna(inplace=True)
+
+        marker_space = 200
+
+        # Initialize the marker columns with NaNs
+        pred_result['prediction_price_marker_p3'] = np.nan
+        pred_result['prediction_price_marker_p2'] = np.nan
+        pred_result['prediction_price_marker_p1'] = np.nan
+        pred_result['prediction_price_marker_m3'] = np.nan
+        pred_result['prediction_price_marker_m2'] = np.nan
+        pred_result['prediction_price_marker_m1'] = np.nan
+
+        pred_result.loc[pred_result['prediction'] == 3, 'prediction_price_marker_p3'] = pred_result['low'] - marker_space
+        pred_result.loc[pred_result['prediction'] == 2, 'prediction_price_marker_p2'] = pred_result['low'] - marker_space
+        pred_result.loc[pred_result['prediction'] == 1, 'prediction_price_marker_p1'] = pred_result['low'] - marker_space
+
+        pred_result.loc[pred_result['prediction'] == -3, 'prediction_price_marker_m3'] = pred_result['high'] + marker_space
+        pred_result.loc[pred_result['prediction'] == -2, 'prediction_price_marker_m2'] = pred_result['high'] + marker_space
+        pred_result.loc[pred_result['prediction'] == -1, 'prediction_price_marker_m1'] = pred_result['high'] + marker_space
+
+        pred_result['prediction_ind_marker_p3'] = np.nan
+        pred_result['prediction_ind_marker_p2'] = np.nan
+        pred_result['prediction_ind_marker_p1'] = np.nan
+        pred_result['prediction_ind_marker_m3'] = np.nan
+        pred_result['prediction_ind_marker_m2'] = np.nan
+        pred_result['prediction_ind_marker_m1'] = np.nan
+
+        pred_result.loc[pred_result['prediction'] == 3, 'prediction_ind_marker_p3'] = pred_result['ema_20'] - marker_space
+        pred_result.loc[pred_result['prediction'] == 2, 'prediction_ind_marker_p2'] = pred_result['ema_20'] - marker_space
+        pred_result.loc[pred_result['prediction'] == 1, 'prediction_ind_marker_p1'] = pred_result['ema_20'] - marker_space
+
+        pred_result.loc[pred_result['prediction'] == -3, 'prediction_ind_marker_m3'] = pred_result['ema_20'] + marker_space
+        pred_result.loc[pred_result['prediction'] == -2, 'prediction_ind_marker_m2'] = pred_result['ema_20'] + marker_space
+        pred_result.loc[pred_result['prediction'] == -1, 'prediction_ind_marker_m1'] = pred_result['ema_20'] + marker_space
 
 
-        return pred_result
+        # Plot
+        # Set seaborn style
+        sns.set_style("whitegrid")
 
-    
+        # Create subplots: one for price, one for MACD histogram
+        fig, axes = plt.subplots(nrows=3, ncols=1, figsize=(25,25), gridspec_kw={'height_ratios': [2, 1, 2]})
+        fig.tight_layout(pad=3.0)
+
+        # Plotting price data on the first subplot
+        axes[0].plot(pred_result['close'], label='Close Price', color='blue', linewidth=1)
+
+        axes[0].scatter(
+                pred_result['prediction_price_marker_p1'].index, 
+                pred_result['prediction_price_marker_p1'],
+                color='greenyellow', 
+                marker='.', 
+                label='Prediction = + Weak',
+                s=10,
+            )
+
+        axes[0].scatter(
+                pred_result['prediction_price_marker_p2'].index, 
+                pred_result['prediction_price_marker_p2'],
+                color='limegreen', 
+                marker='^', 
+                label='Prediction = +',
+                s=20
+            )
+        
+        axes[0].scatter(
+                pred_result['prediction_price_marker_p3'].index, 
+                pred_result['prediction_price_marker_p3'],
+                color='darkgreen', 
+                marker='^', 
+                label='Prediction = + Strong',
+                s=20
+            )
+
+        axes[0].scatter(
+                pred_result['prediction_price_marker_m1'].index, 
+                pred_result['prediction_price_marker_m1'],
+                color='lightsalmon',
+                marker='.', 
+                label='Prediction = - Weak',
+                s=10,
+            )
+
+        axes[0].scatter(
+                pred_result['prediction_price_marker_m2'].index, 
+                pred_result['prediction_price_marker_m2'],
+                color='coral',
+                marker='v', 
+                label='Prediction = -',
+                s=20,
+            )
+
+        axes[0].scatter(
+                pred_result['prediction_price_marker_m3'].index, 
+                pred_result['prediction_price_marker_m3'],
+                color='red',
+                marker='v', 
+                label='Prediction = - Strong',
+                s=20,
+            )
+        
+        axes[0].set_title(f'BTCUSDT Trend Prediction {self.predict_period} hr ahead')
+        axes[0].set_ylabel('Price')
+        axes[0].legend(loc='lower right')
+
+        # Filling in the area between high and low prices (optional)
+        axes[0].fill_between(pred_result.index, pred_result['high'], pred_result['low'], color='skyblue', alpha=0.6)
+
+        # line plot EMA 10 and 20
+        axes[1].plot(pred_result.index, pred_result['ema_10'], label='EMA 10', color='orange', alpha=0.7, linewidth=1)
+        axes[1].plot(pred_result.index, pred_result['ema_20'], label='EMA 20', color='slateblue', alpha=0.7, linewidth=1)
+
+        axes[1].scatter(
+                pred_result['prediction_ind_marker_p1'].index, 
+                pred_result['prediction_ind_marker_p1'],
+                color='greenyellow', 
+                marker='.', 
+                s=10,
+            )
+
+        axes[1].scatter(
+                pred_result['prediction_ind_marker_p2'].index, 
+                pred_result['prediction_ind_marker_p2'],
+                color='limegreen', 
+                marker='^', 
+                # label='Prediction = +',
+                s=20
+            )
+        
+        axes[1].scatter(
+                pred_result['prediction_ind_marker_p3'].index, 
+                pred_result['prediction_ind_marker_p3'],
+                color='darkgreen', 
+                marker='^', 
+                # label='Prediction = + Strong',
+                s=20
+            )
+
+        axes[1].scatter(
+                pred_result['prediction_ind_marker_m1'].index, 
+                pred_result['prediction_ind_marker_m1'],
+                color='lightsalmon',
+                marker='.', 
+                s=10,
+            )
+
+        axes[1].scatter(
+                pred_result['prediction_ind_marker_m2'].index, 
+                pred_result['prediction_ind_marker_m2'],
+                color='lightcoral',
+                marker='v', 
+                s=20,
+            )
+        
+        axes[1].scatter(
+                pred_result['prediction_ind_marker_m3'].index, 
+                pred_result['prediction_ind_marker_m3'],
+                color='red',
+                marker='v', 
+                s=20,
+        )
+
+        axes[1].set_title('EMAs Trend prediction')
+        axes[1].set_ylabel('Value')
+        axes[1].set_xlabel('Period')
+        axes[1].legend(loc='lower right')
+
+        # plot candlestick
+        df_candle = pred_result.iloc[-48:].copy()
+        df_candle.index = pd.to_datetime(df_candle.index)
+
+        
+        # ====
+        # Use mplfinance to plot on axes[2]
+        # add_plot = [mpf.make_addplot(df_candle['prediction_price_marker_p1'], marker='.', color='greenyellow', markersize=100)]
+        add_plot = [
+            # plot EMA 10 and 20
+            mpf.make_addplot(df_candle['ema_10'], ax=axes[2], color='orange', alpha=0.7),
+            mpf.make_addplot(df_candle['ema_20'], ax=axes[2], color='slateblue', alpha=0.7),
+
+            mpf.make_addplot(df_candle['prediction_price_marker_p1'], ax=axes[2], type='scatter', marker='.', color='greenyellow', markersize=50),
+            mpf.make_addplot(df_candle['prediction_price_marker_p2'], ax=axes[2], type='scatter', marker='^', color='limegreen', markersize=50),
+            mpf.make_addplot(df_candle['prediction_price_marker_p3'], ax=axes[2], type='scatter', marker='^', color='darkgreen', markersize=50),
+            mpf.make_addplot(df_candle['prediction_price_marker_m1'], ax=axes[2], type='scatter', marker='.', color='lightsalmon', markersize=50),
+            mpf.make_addplot(df_candle['prediction_price_marker_m2'], ax=axes[2], type='scatter', marker='v', color='coral', markersize=50),
+            mpf.make_addplot(df_candle['prediction_price_marker_m3'], ax=axes[2], type='scatter', marker='v', color='red', markersize=50),
+        ]
+        mpf.plot(df_candle, type='candle', ax=axes[2], addplot=add_plot, style='yahoo')
+
+        # Adjust the x-axis of the candlestick plot
+        axes[2].tick_params(axis='x', rotation=45)
+        axes[2].xaxis.set_major_locator(plt.MaxNLocator(nbins=len(df_candle)))
+        axes[2].set_xticks(range(0, len(df_candle.index), 1))
+        axes[2].set_xticklabels(df_candle.index, rotation=90)
+
+        # set plot title
+        axes[2].set_title(f'BTCUSDT Trend Prediction {self.predict_period} hr ahead- Candlestick')
+
+        plot_filepath = self.plot_path + self.model_name + '_prediction.png'
+        if to_file:
+            # save plot to file
+            fig.savefig(plot_filepath)
+        else:
+            plt.show()
+
+        return plot_filepath
 
 # === Usage ===
 # predictor = BtcTrendPredictor(predict_period = 1)
